@@ -33,7 +33,7 @@ def Xi(lmax, r, eta0, nB, kn=100):
             elif spin == -1:
                 kernel = -1j * np.sqrt(l*(l+1)) * jl / x
             integrand = kernel * base[None, :]
-            xi_table[(l, spin)] = np.trapezoid(integrand, k, axis=1)
+            xi_table[(l, spin)] = 2 * np.trapezoid(integrand, k, axis=1)
             
     return xi_table
 
@@ -73,7 +73,7 @@ def Upsilon(lmax, r, T_theta, kn=100):
                 kernel = jl
             elif ut == 'R':
                 kernel = ( x * jlp - jl )
-            upsilon_table[(l,ut)] = np.trapezoid( kernel * Ttheta[None, :], k, axis=1 )
+            upsilon_table[(l,ut)] = 2 * np.trapezoid( kernel * Ttheta[None, :], k, axis=1 )
     return upsilon_table
 
 
@@ -124,8 +124,8 @@ def sqrt_factorial_ratio(a, b):
     return np.exp(0.5 * (gammaln(a + 1) - gammaln(b + 1)))
 
 def integ_term_D(l, l1, l2, r, Upsilon, Xi):
-    integrand = Upsilon[(l,'D')](r) * ( Xi[(l1,+1)](r) * Xi[(l2,0)](r) + Xi[(l2,+1)](r) * Xi[(l1,0)](r) )
-    return 2.0 * Wigner(l,l1,l2,0,1,-1) * np.trapezoid(integrand, r)
+    integrand = Upsilon[(l,'D')](r) * ( Xi[(l1,+1)](r) * Xi[(l2,0)](r) - Xi[(l2,+1)](r) * Xi[(l1,0)](r) )
+    return -2.0 * Wigner(l,l1,l2,0,1,-1) * np.trapezoid(integrand, r)
 
 def integ_term_L(l, l1, l2, r, Upsilon, Xi):
     W211 = Wigner(l,l1,l2,-2,1,1)
@@ -134,14 +134,14 @@ def integ_term_L(l, l1, l2, r, Upsilon, Xi):
     pref21 = sqrt_factorial_ratio(l+2,l-2) * (-W211) + l*(l+1)*W011
     integrand12 =  Upsilon[(l,'L')](r) * Xi[(l1,+1)](r) * Xi[(l2,0)](r)
     integrand21 =  Upsilon[(l,'L')](r) * Xi[(l2,+1)](r) * Xi[(l1,0)](r)
-    return pref12 * np.trapezoid(integrand12, r) + pref12 * np.trapezoid(integrand21, r)
+    return - pref12 * np.trapezoid(integrand12, r) + pref12 * np.trapezoid(integrand21, r)
 
 def integ_term_R(l, l1, l2, r, Upsilon, Xi):
     pref12 = 2.0 * sqrt_factorial_ratio(l+1,l-1) * Wigner(l,l1,l2,-1,0,1)
     pref21 = 2.0 * sqrt_factorial_ratio(l+1,l-1) * Wigner(l,l2,l1,-1,0,1)
     integrand12 = Upsilon[(l,'R')](r) * Xi[(l1,-1)](r) * Xi[(l2,0)](r)
     integrand21 = Upsilon[(l,'R')](r) * Xi[(l2,-1)](r) * Xi[(l1,0)](r)
-    return pref12 * np.trapezoid(integrand12, r) + pref21 * np.trapezoid(integrand21, r)
+    return pref12 * np.trapezoid(integrand12, r) - pref21 * np.trapezoid(integrand21, r)
 
 
 def bispec(l,l1,l2,Upsilon,Xi,logrmin=2,logrmax=5,rn=100):
@@ -152,7 +152,6 @@ def bispec(l,l1,l2,Upsilon,Xi,logrmin=2,logrmax=5,rn=100):
     bispec_D = integ_term_D(l,l1,l2,r,Upsilon,Xi)
     bispec_L = integ_term_L(l,l1,l2,r,Upsilon,Xi)
     bispec_R = integ_term_R(l,l1,l2,r,Upsilon,Xi)
-    phase = -(4.0*np.pi)**3 * (-1j) ** (l+l1+l2)
-    return phase * p_minus(l,l1,l2) * gamma(l,l1,l2) * (bispec_D+bispec_L+bispec_R)
+    return (-1j)**(l+l1+l2) * p_minus(l,l1,l2) * gamma(l,l1,l2) * (bispec_D+bispec_L+bispec_R)
 
     
