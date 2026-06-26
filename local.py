@@ -43,18 +43,26 @@ def compute_transfer_B():
     return ells, ks, TB_lk
 
 
-def claa(lmax, eta0, nB, xn=100, lnxmin=-1, lnxmax=4):
+def integ_opacity(lmax, k, eta0, eta, dot_tau):
+    r'''
+    Computing \int d\eta \dot{\tau} j_l(k\chi)/k\chi
+    '''
 
-    l_list = range(2, lmax)
-    x = np.logspace(lnxmin,lnxmax,xn)
-    xi_table = {}
+    l_list = range(2, lmax+1)
+    x = np.outer(k, (eta0-eta))
+    x0 = k * eta0
+    integ  = np.zeros((lmax+1,len(k)))
+    integ0 = np.zeros((lmax+1,len(k)))
     
     for ell in l_list:
-        l = int(ell)        
-        integrand = spherical_jn(l,x)**2 * x**nB
-        xi_table[(l, 'aa')] = l*(l+1)*np.trapezoid(integrand, x)/eta0**(nB+3)
-            
-    return xi_table
+        
+        l = int(ell)
+        integrand = dot_tau * spherical_jn(l, x) / x
+
+        integ[l] = np.trapezoid(integrand, eta, axis=1)    
+        integ0[l] = spherical_jn(l, x0)/x0
+
+    return integ, integ0
 
 
 def Xi(lmax, r, eta0, nB, kn=100, lnkmin=-5, lnkmax=-1.5, check_claa=False):
