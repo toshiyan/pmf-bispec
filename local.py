@@ -1,8 +1,33 @@
 import numpy as np, camb
+from scipy import constants as const
 from scipy.special import spherical_jn, gammaln
 from scipy.interpolate import RectBivariateSpline, interp1d
 from sympy.physics.wigner import wigner_3j
 from functools import lru_cache
+
+def normalization(n=-2.9):
+
+    R_g = 1/(1+3.044*(7/8)*(4/11)**(4/3))
+    rho_g = (np.pi**2/15)*(2.7255 * const.Boltzmann / const.electron_volt)**4 # eV^4
+    GHz = 1e9*const.hbar/const.e # Hz -> m -> eV
+    
+    # Gaussian CGS
+    q = np.sqrt(const.alpha)
+    nG = 6.93e-11 # eV^2
+
+    log_value = gammaln((n + 3) / 2)
+    fac = np.exp(log_value)
+    
+    A_T = (-1/rho_g)*1.5*R_g*np.log(10**17)  # eV^{-4}
+    A_a = 3./(32.*np.pi**4*(100*GHz)**2*q) # eV^{-2}
+    A_B = 4*np.pi**2*nG**2/fac # eV^4
+    
+    norm = {}
+    norm['Taa'] = A_T*A_a**2*A_B**2
+    norm['Baa'] = -4.*np.sqrt(2.)*norm['Taa']
+    norm['aa']  = 4*(np.pi)**3*A_a**2*A_B
+
+    return norm
 
 
 def compute_transfer_B():
@@ -18,7 +43,21 @@ def compute_transfer_B():
     return ells, ks, TB_lk
 
 
-def Xi(lmax, r, eta0, nB, kn=100, lnkmax=-1.5):
+def claa(lmax, eta0, nB, xn=100, lnxmin=-1, lnxmax=4):
+
+    l_list = range(2, lmax)
+    x = np.logspace(lnxmin,lnxmax,xn)
+    xi_table = {}
+    
+    for ell in l_list:
+        l = int(ell)        
+        integrand = spherical_jn(l,x)**2 * x**nB
+        xi_table[(l, 'aa')] = l*(l+1)*np.trapezoid(integrand, x)/eta0**(nB+3)
+            
+    return xi_table
+
+
+def Xi(lmax, r, eta0, nB, kn=100, lnkmin=-5, lnkmax=-1.5, check_claa=False):
     """
     Precompute Xi_l^{spin, X}(r) on the supplied r grid.
 
@@ -28,31 +67,34 @@ def Xi(lmax, r, eta0, nB, kn=100, lnkmax=-1.5):
         xi_table[(ell, spin)] = array over r
     """
     l_list = range(2, lmax)
-    k = np.logspace(-5,lnkmax,kn)
+    k = np.logspace(lnkmin,lnkmax,kn)
     x = np.outer(r, k)
     xi_table = {}
+    
     for ell in l_list:
+        
         l = int(ell)
         jl = spherical_jn(l, x)
         jlp = spherical_jn(l, x, derivative=True)
         y = k * eta0
+        
         Talpha = np.sqrt(l*(l+1)) * spherical_jn(l, y) / y
         base = k**2 * Talpha * k**nB  # P(k)=k^nB
-        for mode in ('B', 'E', 'L'):
-            if mode == 'B':
-                kernel = jl
-            elif mode == 'E':
-                kernel = (jl / x + jlp)
-            elif mode == 'L':
-                kernel = np.sqrt(l*(l+1)) * jl / x
-            integrand = kernel * base[None, :]
-            xi_table[(l, mode)] = np.trapezoid(integrand, k, axis=1)
+
+        if check_claa:
+            integrand = base * Talpha
+            xi_table[(l, 'aa')] = np.trapezoid(integrand, k)
+        else:
+            kernel = { 'B': jl, 'E': jl/x + jlp, 'L': np.sqrt(l*(l+1))*jl/x }
+            for mode in ('B', 'E', 'L'):
+                integrand = kernel[mode] * base[None, :]
+                xi_table[(l, mode)] = np.trapezoid(integrand, k, axis=1)
             
     return xi_table
 
 
 def Xi_func(lmax, r, eta0, nB, kn=100, kind="cubic"):
-    Xi_table  = Xi(lmax, r, eta0, nB, kn=kn)
+    Xi_table  = Xi(lmax, r, eta0, nB, kn=kn, check_claa=False)
     Xi_interp = {}
     for key, values in Xi_table.items():
         Xi_interp[key] = interp1d(r, values, kind=kind, bounds_error=True)
